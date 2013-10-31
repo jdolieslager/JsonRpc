@@ -1,0 +1,27 @@
+{
+    "name": "jdolieslager/jsonrpc",
+    "description": "Server and/or client library for JSON RPC communication",
+    "license": "BSD-3-Clause",  
+    "keywords" : [
+        "jdolieslager",
+        "json",
+        "rpc",
+        "server",
+        "client"
+    ],
+    "authors": [
+        {
+            "name": "Jesper Dolieslager",
+            "email": "jesper@flyingeagle.nl"
+        }
+    ],
+    "minimum-stability": "stable",
+    "autoload" : {
+        "psr-0" : {
+            "Jdolieslager\JsonRpc" : "src/"
+        }
+    },
+    "require": {
+        "php" : ">= 5.3.3"
+    }
+}
