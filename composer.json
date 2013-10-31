@@ -18,7 +18,7 @@
     "minimum-stability": "stable",
     "autoload" : {
         "psr-0" : {
-            "Jdolieslager\JsonRpc" : "src/"
+            "Jdolieslager\\JsonRpc" : "src/"
         }
     },
     "require": {
