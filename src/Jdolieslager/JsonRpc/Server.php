@@ -45,28 +45,42 @@ class Server
     /**
      * Construct the JSON RPC Server
      *
-     * @param object  $handleObject  An Object that handles the request
      * @param boolean $debugMode
      * @return Server
      */
-    public function __construct($handleObject, $debugMode = false)
+    public function __construct($debugMode = false)
     {
-        $this->handleObject = $handleObject;
         $this->methods      = new Collection\Method();
         $this->debugMode    = $debugMode;
     }
 
     /**
-     * Parse a raw json encoded string to a Response object
+     * Set a handle object
      *
-     * @param string $string    A JSON encode RPC string
-     * @return Entity\Response | NULL when id is NULL
+     * @param object $object
+     * @throws Exception\InvalidArgument
      */
-    public function getResponseForRawRequest($string)
+    public function setHandleObject($object)
     {
-        // Create reflection
-        $this->reflectHandleObject();
+        if (is_object($object) === false) {
+            throw new Exception\InvalidArgument(
+                'Handle object should be an object',
+                1
+            );
+        }
 
+        $this->handleObject = $object;
+        $this->reflected    = false;
+    }
+
+    /**
+     * Create Request object from Raw Request
+     *
+     * @param string $string
+     * @return Entity\Request | Entity\Response on error
+     */
+    public function createRequestFromRawRequest($string)
+    {
         try {
             // Always hace request object
             $request = new Entity\Request();
@@ -98,15 +112,30 @@ class Server
                 $request->addParam($value, $offset);
             }
 
-            // Perform the request
-            $response = $this->getResponseForRequest($request);
+            return $request;
         } catch (\Exception $e) {
             // Error occured and create
-            $response = $this->createErrorFromException($request, $e);
+            return $this->createResponseFromException($request, $e);
+        }
+    }
+
+    /**
+     * Parse a raw json encoded string to a Response object
+     *
+     * @param string $string    A JSON encode RPC string
+     * @return Entity\Response | NULL when id is NULL
+     */
+    public function createResponseForRawRequest($string)
+    {
+        $request = $this->createRequestFromRawRequest($string);
+
+        // When we get an response object. An error has occured
+        if (($request instanceof Entity\Response)) {
+            return $request;
         }
 
-        // Return the response
-        return $response;
+        // Perform request action
+        return $this->createResponseForRequest($request);
     }
 
     /**
@@ -115,7 +144,7 @@ class Server
      * @param  Entity\Response $response
      * @return string
      */
-    public function responseToRaw(Entity\Response $response)
+    public function createRawResponseFromResponse(Entity\Response $response)
     {
         // Get the array
         $array = $response->getArrayCopy();
@@ -141,7 +170,7 @@ class Server
      *
      * @param Entity\Request $request
      */
-    public function getResponseForRequest(Entity\Request $request)
+    public function createResponseForRequest(Entity\Request $request)
     {
         // Make reflection
         $this->reflectHandleObject();
@@ -149,7 +178,7 @@ class Server
         try {
             $response = $this->parseRequest($request);
         } catch (\Exception $e) {
-            $response = $this->createErrorFromException($request, $e);
+            $response = $this->createResponseFromException($request, $e);
         }
 
         return $response;
@@ -248,7 +277,7 @@ class Server
      * @param  \Exception $e
      * @return Entity\Response
      */
-    protected function createErrorFromException(Entity\Request $request, \Exception $e)
+    public function createResponseFromException(Entity\Request $request, \Exception $e)
     {
         if (($e instanceof Exception\ExceptionInterface) === false) {
             $e = new Exception\InvalidRequest(
@@ -282,18 +311,23 @@ class Server
 
         if ($response->getId() !== null && $code !== static::METHOD_NOT_FOUND) {
             $methodName = strtolower($request->getMethod());
-            $method     = $this->methods->offsetGet($methodName);
 
-            $data['parameters'] = $method->getParameters()->getArrayCopy();
+            if ($this->methods->offsetExists($methodName)) {
+                $method     = $this->methods->offsetGet($methodName);
+
+                $data['parameters'] = $method->getParameters()->getArrayCopy();
+            }
         }
 
+        // Only set request object when set
         if ($response->getId() !== null) {
             $data['request'] = $request->getArrayCopy();
         }
 
+        // In debug mode we print more data
         if ($this->debugMode === true) {
-            $data['backtrace'] = $e->getTrace();
             $data['exceptions'] = array();
+            $data['backtrace']  = $e->getTrace();
 
             while (($e = $e->getPrevious())) {
                 $data['exceptions'][] = array($e->getCode() => $e->getMessage());

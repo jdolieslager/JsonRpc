@@ -128,7 +128,7 @@ class Request
     public function getArrayCopy()
     {
         $return           = get_object_vars($this);
-        $return['params'] = $return['params']->getArrayCopy();
+        $return['params'] = $this->getParams()->getArrayCopy();
 
         return $return;
     }
