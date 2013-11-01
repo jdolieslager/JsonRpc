@@ -43,15 +43,30 @@ class Server
     protected $debugMode = false;
 
     /**
+     * @var Entity\Request | NULL
+     */
+    protected $lastRequest;
+
+    /**
      * Construct the JSON RPC Server
      *
      * @param boolean $debugMode
+     * @param boolean $handleFatalErrors
      * @return Server
      */
-    public function __construct($debugMode = false)
+    public function __construct($debugMode = false, $handleFatalErrors = true)
     {
         $this->methods      = new Collection\Method();
         $this->debugMode    = $debugMode;
+
+        if ($handleFatalErrors === true) {
+            // Whatever the application says. We do not print any errors. Will be
+            // in JSON RPC compactible way
+
+            ini_set('display_errors', 'off');
+            set_error_handler(array($this, 'handlePhpError'), E_ALL | E_STRICT);
+            register_shutdown_function(array($this, 'handleUncleanShutdown'));
+        }
     }
 
     /**
@@ -111,6 +126,9 @@ class Server
             foreach ($params as $offset => $value) {
                 $request->addParam($value, $offset);
             }
+
+            // Set last request
+            $this->lastRequest = $request;
 
             return $request;
         } catch (\Exception $e) {
@@ -172,6 +190,9 @@ class Server
      */
     public function createResponseForRequest(Entity\Request $request)
     {
+        // Set the last request object
+        $this->lastRequest = $request;
+
         // Make reflection
         $this->reflectHandleObject();
 
@@ -341,6 +362,56 @@ class Server
     }
 
     /**
+     * Print string to the ouput stream
+     *
+     * @param Entity\Response | NULL $response  On NULL print No Content
+     * @return void
+     */
+    public function printResponse(Entity\Response $response = null)
+    {
+        // Response NULL means no content
+        if ($response === null) {
+            if (!headers_sent()) {
+                header('No Content', null, 204);
+            }
+
+            return;
+        }
+
+        // Set HTTP headers
+        if (!headers_sent()) {
+            header('OK', null, 200);
+            header('Content-Type: application/json');
+            //@TODO correct status code
+        }
+
+        // print json encoded string
+        echo $this->createRawResponseFromResponse($response);
+    }
+
+    /**
+     * Print JSON encoded string directly from raw request
+     *
+     * @param string $string
+     * @return void
+     */
+    public function printResponseForRawRequest($string)
+    {
+        return $this->printResponse($this->createResponseForRawRequest($string));
+    }
+
+    /**
+     * Print JSON encoded string directly from a request object
+     *
+     * @param Entity\Request $request
+     * @return void
+     */
+    public function printResponseForRequest(Entity\Request $request)
+    {
+        return $this->printResponse($this->createResponseForRequest($request));
+    }
+
+    /**
      * Parse the handle class for method information
      *
      * @return void
@@ -412,5 +483,61 @@ class Server
         }
 
         return $default;
+    }
+
+    /**
+     * Handle any PHP error. IT will return error code when something goes wrong.
+     * Script will be terminated
+     *
+     * @param integer $code
+     * @param string $message
+     * @param string $file
+     * @param string $line
+     * @param mixed $context
+     * @return void
+     */
+    public function handlePhpError($code, $message, $file = null, $line = null, $context= null)
+    {
+        // Retrieve the request object
+        $request = $this->lastRequest;
+        if (($request instanceof Entity\Request) === false) {
+            $request = new Entity\Request();
+        }
+
+        // Create response object
+        $response = $this->createResponseFromException(
+            $request,
+            new \Exception(
+                $message,
+                $code
+            )
+        );
+
+        // Set response
+        $this->printResponse($response);
+
+        // No use to go further stop the execution
+        exit;
+    }
+
+    /**
+     * Check if any errors occured (Eg. fatal errors)
+     *
+     * @return void
+     */
+    public function handleUncleanShutdown()
+    {
+        $last = error_get_last();
+        if (empty($last)) {
+            return;
+        }
+
+        $code = $this->getArrayItem('type', $last, 1);
+        $message = $this->getArrayItem('message', $last, '');
+        $line = $this->getArrayItem('line', $last, null);
+        $file = $this->getArrayItem('file', $last, null);
+
+        // Handle php error
+        return $this->handlePhpError($code, $message, $file, $line);
     }
 }
