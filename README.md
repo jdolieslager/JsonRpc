@@ -19,7 +19,7 @@ $server->setHandleObject(new \Test());
 $server->printResponseForRawRequest(file_get_contents('php://input'));
 ```
 
-Example Usage (Client Single Request Really Simple)
+Client Single Request (Argument based)
 =============
 ```php
 $client   = new Jdolieslager\JsonRpc\Client('http://jsonrpc.mine');
@@ -33,7 +33,7 @@ if ($response->hasError()) {
 }
 ```
 
-Example Usage (Client Single Request Simple)
+Client Single Request (Object based)
 =============
 ```php
 $request = new Jdolieslager\JsonRpc\Entity\Request();
@@ -54,16 +54,16 @@ if ($response->hasError()) {
 
 ```
 
-
-Example Usage (Client Single Request Notification)
+Client Single Request Notification (Argument based)
 =============
 ```php
 $client   = new Jdolieslager\JsonRpc\Client('http://jsonrpc.mine');
 $client->sendNotification('hello', array('name' => 'World'));
 ```
 
-Example Usage (Client Multiple Requests)
-```
+Client Multiple Requests
+==============
+```php
 use Jdolieslager\JsonRpc\Entity\Response;
 
 // Create objects
