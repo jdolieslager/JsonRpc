@@ -4,14 +4,46 @@ function __autoload($class)
     include __DIR__ . '/src/' . str_replace('\\', '/', $class). '.php';
 }
 
-$string = '[
-    {"jsonrpc": "2.0", "method": "sum", "params": [1,2,4], "id": "1"},
-    {"jsonrpc": "2.0", "method": "notify_hello", "params": [7]},
-    {"jsonrpc": "2.0", "method": "subtract", "params": [42,23], "id": "2"},
-    {"foo": "boo"},
-    {"jsonrpc": "2.0", "method": "foo.get", "params": {"name": "myself"}, "id": "5"},
-    {"jsonrpc": "2.0", "method": "get_data", "id": "9"}
-]';
+use Jdolieslager\JsonRpc\Entity\Response;
 
-$server = new Jdolieslager\JsonRpc\Server(true);
-$server->printResponseForRawRequest($string);
+// Create objects
+$client     = new Jdolieslager\JsonRpc\Client('http://jsonrpc.mine');
+$collection = new Jdolieslager\JsonRpc\Collection\Request();
+$request    = new Jdolieslager\JsonRpc\Entity\Request();
+
+// Create request one
+$request->setId(1);
+$request->setMethod('hello');
+$request->addParam('World', 'name');
+$collection->addRequest($request, function(Response $response) {
+    if ($response->hasError()) {
+        $error = $response->getError();
+        throw new \Exception($error->getMessage(), $error->getCode());
+    } else {
+        echo $response->getResult();
+    }
+});
+
+// Crete request two
+$request = new Jdolieslager\JsonRpc\Entity\Request();
+$request->setId(2);
+$request->setMethod('hello');
+$request->addParam('Jesper', 'name');
+$collection->addRequest($request, function(Response $response) {
+    if ($response->hasError()) {
+        $error = $response->getError();
+        throw new \Exception($error->getMessage(), $error->getCode());
+    } else {
+        echo $response->getResult();
+    }
+});
+
+// Responses holds all the responses
+// Index is the ID number
+$responses = $client->sendRequest($collection);
+
+
+
+
+
+

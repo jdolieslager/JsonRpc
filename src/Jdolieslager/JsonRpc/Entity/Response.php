@@ -108,6 +108,14 @@ class Response
     }
 
     /**
+     * @return boolean
+     */
+    public function hasError()
+    {
+        return (bool) ($this->getError() instanceof Error);
+    }
+
+    /**
      * Get an array copy
      */
     public function getArrayCopy()

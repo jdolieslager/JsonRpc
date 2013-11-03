@@ -180,7 +180,7 @@ class Server
         }
 
         // Encode the remaining array
-        return json_encode($array);
+        return json_encode($array, JSON_PRETTY_PRINT);
     }
 
     /**
@@ -338,11 +338,6 @@ class Server
 
                 $data['parameters'] = $method->getParameters()->getArrayCopy();
             }
-        }
-
-        // Only set request object when set
-        if ($response->getId() !== null) {
-            $data['request'] = $request->getArrayCopy();
         }
 
         // In debug mode we print more data
