@@ -15,7 +15,7 @@ class Test
 }
 
 $server = new Jdolieslager\JsonRpc\Server(true);
-$server->setHandleObject(new \Test());
+$server->setGlobalExtension(new \Test());
 $server->printResponseForRawRequest(file_get_contents('php://input'));
 ```
 

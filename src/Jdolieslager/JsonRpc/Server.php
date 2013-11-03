@@ -273,7 +273,7 @@ class Server
 
         // Perform action on the handle object
         $result = call_user_func_array(
-            array($this->handleObject, $method->getName()),
+            array($this->extensions->offsetGet('global'), $method->getName()),
             $arguments
         );
 
