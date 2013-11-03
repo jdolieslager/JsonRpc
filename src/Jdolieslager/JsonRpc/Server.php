@@ -19,9 +19,9 @@ class Server
     /**
      * This object will be called with the methods
      *
-     * @var object
+     * @var \ArrayIterator
      */
-    protected $handleObject;
+    protected $extensions;
 
     /**
      * Contains all the methods of the handle object
@@ -56,6 +56,7 @@ class Server
      */
     public function __construct($debugMode = false, $handleFatalErrors = true)
     {
+        $this->extensions   = new \ArrayIterator();
         $this->methods      = new Collection\Method();
         $this->debugMode    = $debugMode;
 
@@ -70,12 +71,12 @@ class Server
     }
 
     /**
-     * Set a handle object
+     * Global extension will be used when no namespace has been used
+     * in the request
      *
      * @param object $object
-     * @throws Exception\InvalidArgument
      */
-    public function setHandleObject($object)
+    public function setGlobalExtension($object)
     {
         if (is_object($object) === false) {
             throw new Exception\InvalidArgument(
@@ -84,7 +85,7 @@ class Server
             );
         }
 
-        $this->handleObject = $object;
+        $this->extensions->offsetSet('global', $object);
         $this->reflected    = false;
     }
 
@@ -417,8 +418,16 @@ class Server
             return;
         }
 
+        // @TODO build extension capabilities
+        if ($this->extensions->offsetExists('global') === false) {
+            throw new Exception\RuntimeException(
+                'No global handler has been set!',
+                1
+            );
+        }
+
         // Create reflection
-        $reflectionClass   = new \ReflectionClass($this->handleObject);
+        $reflectionClass   = new \ReflectionClass($this->extensions->offsetGet('global'));
         $reflectionMethods = $reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC);
 
         // Loop through the class methods (Only public);
