@@ -1,6 +1,8 @@
 <?php
 namespace Jdolieslager\JsonRpc;
 
+use Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerStack;
+
 /**
  * @category    Jdolieslager
  * @package     JsonRpc
@@ -22,24 +24,62 @@ class Client
     /**
      * Client Error constants
      */
-     const CLIENT_PARSE_ERROR     = -22700;
-     const CLIENT_HOST_NOT_FOUND  = -22600;
-     const CLIENT_EXPECTED_BATCH  = -22601;
-     const CLIENT_EXPECTED_SINGLE = -22602;
+    const CLIENT_PARSE_ERROR     = -22700;
+    const CLIENT_HOST_NOT_FOUND  = -22600;
+    const CLIENT_EXPECTED_BATCH  = -22601;
+    const CLIENT_EXPECTED_SINGLE = -22602;
 
-     /**
-      * @var string
-      */
-      protected $url;
+    /**
+     * Protocol stack layer placement constants
+     */
+    const LAYER_PLACEMENT_TOP    = ProtocolLayerStack::PLACEMENT_TOP;
+    const LAYER_PLACEMENT_BOTTOM = ProtocolLayerStack::PLACEMENT_BOTTOM;
+    const LAYER_PLACEMENT_BELOW  = ProtocolLayerStack::PLACEMENT_BELOW;
+    const LAYER_PLACEMENT_ABOVE  = ProtocolLayerStack::PLACEMENT_ABOVE;
+
+    /**
+     * @var string
+     */
+    protected $url;
+
+    /**
+     * Holds additional layers for the JSON RPC communication
+     *
+     * @var ProtocolLayer\ProtocolLayerStack
+     */
+    protected $protocolLayerStack;
+
+    /**
+     * Holds the current protocal layer
+     *
+     * @var mixed
+     */
+    protected $currentProtocolLayer;
+
+    /**
+     * Add a layer to the stack
+     *
+     * @param ProtocolLayer\ProtocolLayerInterface $layer
+     * @param constant $placement   (self::LAYER_PLACEMENT_*)
+     * @return Server
+     */
+    public function addProtocolLayer(ProtocolLayer\ProtocolLayerInterface $layer, $placement)
+    {
+        $this->protocolLayerStack->addLayer($layer, $placement, $this->currentProtocolLayer);
+        $this->currentProtocolLayer = $layer;
+
+        return $this;
+    }
 
     /**
      * The constructor for the JSON RPC Client
      *
-     * @param string $url\
+     * @param string $url
      */
     public function __construct($url)
     {
         $this->setUrl($url);
+        $this->protocolLayerStack = new ProtocolLayerStack();
     }
 
     /**
@@ -134,6 +174,9 @@ class Client
     {
         $rawPost = $this->prepareRequest($request);
 
+        // First go through the layer stack
+        $rawPost = $this->protocolLayerStack->handleRequest($rawPost);
+
         $ch = curl_init($this->getUrl());
         curl_setopt_array($ch, array(
             CURLOPT_POST           => true,
@@ -179,8 +222,16 @@ class Client
             );
         }
 
+        var_dump($result);
+
+        // First go through the layer stack
+        $result = $this->protocolLayerStack->handleResponse($result);
+
+        var_dump($result);
+        exit;
+
         $json = json_decode($result, true);
-        if ($json === false) {
+        if (is_array($json) === false) {
             throw new Exception\InvalidResponse(
                 'Client parse error',
                 static::CLIENT_PARSE_ERROR
@@ -197,7 +248,7 @@ class Client
                 'Client expected batch result',
                 static::CLIENT_EXPECTED_BATCH
             );
-        // check if we have single result
+            // check if we have single result
         } else if ($isBatch === false && $hasIdKey === false) {
             throw new Exception\InvalidResponse(
                 'Client expected single result',

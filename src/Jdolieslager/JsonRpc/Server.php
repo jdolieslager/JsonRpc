@@ -1,6 +1,8 @@
 <?php
 namespace Jdolieslager\JsonRpc;
 
+use Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerStack;
+
 /**
  * @category    Jdolieslager
  * @package     JsonRpc
@@ -15,6 +17,11 @@ class Server
     const METHOD_NOT_FOUND = -32601;
     const INVALID_PARAMS   = -32602;
     const INTERNAL_ERROR   = -32603;
+
+    const LAYER_PLACEMENT_TOP    = ProtocolLayerStack::PLACEMENT_TOP;
+    const LAYER_PLACEMENT_BOTTOM = ProtocolLayerStack::PLACEMENT_BOTTOM;
+    const LAYER_PLACEMENT_BELOW  = ProtocolLayerStack::PLACEMENT_BELOW;
+    const LAYER_PLACEMENT_ABOVE  = ProtocolLayerStack::PLACEMENT_ABOVE;
 
     /**
      * Makes reflection of the handlers
@@ -43,6 +50,20 @@ class Server
     protected $debugMode = false;
 
     /**
+     * Holds additional layers for the JSON RPC communication
+     *
+     * @var ProtocolLayer\ProtocolLayerStack
+     */
+    protected $protocolLayerStack;
+
+    /**
+     * Holds the current protocal layer
+     *
+     * @var mixed
+     */
+    protected $currentProtocolLayer;
+
+    /**
      * Construct the JSON RPC Server
      *
      * @param boolean $debugMode
@@ -51,9 +72,10 @@ class Server
      */
     public function __construct($debugMode = false, $handleFatalErrors = true)
     {
-        $this->handlers         = new \ArrayIterator();
-        $this->handlerInstances = new \ArrayIterator();
-        $this->debugMode        = $debugMode;
+        $this->handlers           = new \ArrayIterator();
+        $this->handlerInstances   = new \ArrayIterator();
+        $this->protocolLayerStack = new ProtocolLayer\ProtocolLayerStack();
+        $this->debugMode          = $debugMode;
 
         if ($handleFatalErrors === true) {
             // Whatever the application says. We do not print any errors. Will be
@@ -95,6 +117,22 @@ class Server
     }
 
     /**
+     * Add a layer to the stack
+     *
+     * @param ProtocolLayer\ProtocolLayerInterface $layer
+     * @param constant $placement   (self::LAYER_PLACEMENT_*)
+     * @return Server
+     */
+    public function addProtocolLayer(ProtocolLayer\ProtocolLayerInterface $layer, $placement)
+    {
+        $this->protocolLayerStack->addLayer($layer, $placement, $this->currentProtocolLayer);
+        $this->currentProtocolLayer = $layer;
+
+        return $this;
+    }
+
+
+    /**
      * Create Request object from Raw Request
      *
      * @param string $string
@@ -102,6 +140,9 @@ class Server
      */
     public function createRequestFromRawRequest($string)
     {
+        // Process through the layer before processing
+        $string = $this->protocolLayerStack->handleRequest($string);
+
         $collection = new Collection\Request();
 
         try {
@@ -446,7 +487,10 @@ class Server
         }
 
         // print json encoded string
-        echo $this->createRawResponseFromResponse($response);
+        $response = $this->createRawResponseFromResponse($response);
+        $response = $this->protocolLayerStack->handleResponse($response);
+
+        echo $response;
     }
 
     /**
