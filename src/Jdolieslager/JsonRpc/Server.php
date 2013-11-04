@@ -17,25 +17,25 @@ class Server
     const INTERNAL_ERROR   = -32603;
 
     /**
-     * This object will be called with the methods
+     * Makes reflection of the handlers
+     *
+     * @var HandlerReflectionMaker
+     */
+    protected $reflectionMaker;
+
+    /**
+     * Holds a list of handlers
      *
      * @var \ArrayIterator
      */
-    protected $extensions;
+    protected $handlers;
 
     /**
-     * Contains all the methods of the handle object
+     * Holds a list of handlers instances
      *
-     * @var Collection\Method
+     * @var \ArrayIterator
      */
-    protected $methods;
-
-    /**
-     * Keep track if we've reflected the handle object
-     *
-     * @var boolean
-     */
-    protected $reflected = false;
+    protected $handlerInstances;
 
     /**
      * @var boolean
@@ -56,9 +56,9 @@ class Server
      */
     public function __construct($debugMode = false, $handleFatalErrors = true)
     {
-        $this->extensions   = new \ArrayIterator();
-        $this->methods      = new Collection\Method();
-        $this->debugMode    = $debugMode;
+        $this->handlers         = new \ArrayIterator();
+        $this->handlerInstances = new \ArrayIterator();
+        $this->debugMode        = $debugMode;
 
         if ($handleFatalErrors === true) {
             // Whatever the application says. We do not print any errors. Will be
@@ -71,22 +71,32 @@ class Server
     }
 
     /**
-     * Global extension will be used when no namespace has been used
-     * in the request
+     * Set handler
      *
-     * @param object $object
+     * @param string $handlerClass
+     * @param string $namespace     The namespace for the methods (Example profile.)
+     * @return Server
      */
-    public function setGlobalExtension($object)
+    public function registerHandler($handlerClass, $namespace = 'global')
     {
-        if (is_object($object) === false) {
-            throw new Exception\InvalidArgument(
-                'Handle object should be an object',
-                1
-            );
+        $this->handlers->offsetSet($namespace, $handlerClass);
+
+        return $this;
+    }
+
+    /**
+     * Register multiple handlers in one time
+     *
+     * @param array $handlers
+     * @return Server
+     */
+    public function registerHandlers(array $handlers)
+    {
+        foreach ($handlers as $namespace => $handlerClass) {
+            $this->registerHandler($handlerClass, $namespace);
         }
 
-        $this->extensions->offsetSet('global', $object);
-        $this->reflected    = false;
+        return $this;
     }
 
     /**
@@ -194,9 +204,6 @@ class Server
         // Set the last request object
         $this->lastRequest = $request;
 
-        // Make reflection
-        $this->reflectHandleObject();
-
         try {
             $response = $this->parseRequest($request);
         } catch (\Exception $e) {
@@ -217,8 +224,22 @@ class Server
         // normalize the name
         $methodName = strtolower($request->getMethod());
 
+        $namespace = 'global';
+        if (strpos($methodName, '.') !== false) {
+            list($namespace, $methodName) = explode('.', $methodName, 2);
+        }
+
+        // Check if the namespace has been registered
+        if ($this->handlers->offsetExists($namespace) === false) {
+            throw new Exception\InvalidRequest('Method not found', static::METHOD_NOT_FOUND);
+        }
+
+        $methods = $this->getHandlerReflectionMaker()->reflect(
+            $this->handlers->offsetGet($namespace)
+        );
+
         // Check if the method exists
-        if ($this->methods->offsetExists($methodName) === false) {
+        if ($methods->offsetExists($methodName) === false) {
             throw new Exception\InvalidRequest('Method not found', static::METHOD_NOT_FOUND);
         }
 
@@ -246,7 +267,8 @@ class Server
         $arguments = array();
 
         // Get method information
-        $method    = $this->methods->offsetGet($methodName);
+        $method    = $methods->offsetGet($methodName);
+        $handler   = $this->getHandler($namespace);
 
         // Loop through method information
         foreach ($method->getParameters() as $parameter) {
@@ -272,10 +294,7 @@ class Server
         }
 
         // Perform action on the handle object
-        $result = call_user_func_array(
-            array($this->extensions->offsetGet('global'), $method->getName()),
-            $arguments
-        );
+        $result = call_user_func_array(array($handler, $method->getName()), $arguments);
 
         // NULL means no response output
         if ($request->getId() === null) {
@@ -334,10 +353,21 @@ class Server
         if ($response->getId() !== null && $code !== static::METHOD_NOT_FOUND) {
             $methodName = strtolower($request->getMethod());
 
-            if ($this->methods->offsetExists($methodName)) {
-                $method     = $this->methods->offsetGet($methodName);
+            $namespace = 'global';
+            if (strpos($methodName, '.') !== false) {
+                list($namespace, $methodName) = explode('.', $methodName, 2);
+            }
 
-                $data['parameters'] = $method->getParameters()->getArrayCopy();
+            if ($this->handlers->offsetExists($namespace)) {
+                $methods = $this->getHandlerReflectionMaker()->reflect(
+                    $this->handlers->offsetGet($namespace)
+                );
+
+                if ($methods->offsetExists($methodName)) {
+                    $method = $methods->offsetGet($methodName);
+
+                    $data['parameters'] = $method->getParameters()->getArrayCopy();
+                }
             }
         }
 
@@ -405,71 +435,6 @@ class Server
     public function printResponseForRequest(Entity\Request $request)
     {
         return $this->printResponse($this->createResponseForRequest($request));
-    }
-
-    /**
-     * Parse the handle class for method information
-     *
-     * @return void
-     */
-    protected function reflectHandleObject()
-    {
-        if ($this->reflected === true) {
-            return;
-        }
-
-        // @TODO build extension capabilities
-        if ($this->extensions->offsetExists('global') === false) {
-            throw new Exception\RuntimeException(
-                'No global handler has been set!',
-                1
-            );
-        }
-
-        // Create reflection
-        $reflectionClass   = new \ReflectionClass($this->extensions->offsetGet('global'));
-        $reflectionMethods = $reflectionClass->getMethods(\ReflectionMethod::IS_PUBLIC);
-
-        // Loop through the class methods (Only public);
-        foreach ($reflectionMethods as $reflectionMethod) {
-            // Create method information entity
-            $method = new Entity\Method();
-            $method->setName($reflectionMethod->getName());
-
-            // Get method parameters
-            $reflectionParams = $reflectionMethod->getParameters();
-
-            // Evaluate the method params
-            foreach ($reflectionParams as $reflectionParam) {
-                // Create parameter information entity
-                $parameter = new Entity\Parameter();
-                $parameter->setIndex($reflectionParam->getPosition());
-                $parameter->setName($reflectionParam->getName());
-                $parameter->setRequired(
-                    ($reflectionParam->isDefaultValueAvailable() === false)
-                );
-
-                // Only set default value when param is optional
-                if ($parameter->getRequired() === false) {
-                    $parameter->setDefault($reflectionParam->getDefaultValue());
-                }
-
-                // Add the parameter to the container
-                $method->addParameter($parameter);
-            }
-
-            // Add the method to the method container
-            $this->methods->offsetSet(
-                strtolower($method->getName()),
-                $method
-            );
-        }
-
-        // Mark object as reflected
-        $this->reflected = true;
-
-        // Return void
-        return;
     }
 
     /**
@@ -543,5 +508,46 @@ class Server
 
         // Handle php error
         return $this->handlePhpError($code, $message, $file, $line);
+    }
+
+    /**
+     * Reflects handler objects
+     *
+     * @return HandlerReflectionMaker
+     */
+    protected function getHandlerReflectionMaker()
+    {
+        if ($this->reflectionMaker === null) {
+            $this->reflectionMaker = new HandlerReflectionMaker();
+        }
+
+        return $this->reflectionMaker;
+    }
+
+    /**
+     * Get the handler based on the namespace
+     *
+     * @param string $namespace
+     * @return object
+     * @throws Exception\ArgumentException
+     */
+    protected function getHandler($namespace)
+    {
+        // Chack if namespace has been registered
+        if ($this->handlers->offsetExists($namespace) === false) {
+            throw new Exception\InvalidArgument(
+                sprintf($this->exceptions[1], $namespace),
+                1
+            );
+        }
+
+        // Create instance when needed
+        if ($this->handlerInstances->offsetExists($namespace) === false) {
+            $handler = $this->handlers->offsetGet($namespace);
+            $this->handlerInstances->offsetSet($namespace, new $handler);
+        }
+
+        // Return instance
+        return $this->handlerInstances->offsetGet($namespace);
     }
 }
