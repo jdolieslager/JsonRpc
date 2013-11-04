@@ -104,3 +104,44 @@ $collection->addRequest($request, function(Response $response) {
 $responses = $client->sendRequest($collection);
 ```
 
+Encryption Layer (Server)
+===============
+```php
+class Test
+{
+    public function hello($name)
+    {
+        return 'Hello ' . ucfirst($name) . '!';
+    }
+}
+
+$layer = new Jdolieslager\JsonRpc\ProtocolLayer\ServerEncryption(array(
+    'key' => 'my secret pass here'
+));
+
+
+$server = new Jdolieslager\JsonRpc\Server();
+$server->registerHandler('Test');
+$server->addProtocolLayer($layer, Jdolieslager\JsonRpc\Server::LAYER_PLACEMENT_BOTTOM);
+$server->printResponseForRawRequest(file_get_contents('php://input'));
+```
+
+Encryption Layer (client)
+==================
+```php
+$client = new Jdolieslager\JsonRpc\Client(
+    'http://jsonrpc.mine'
+);
+
+$layer = new Jdolieslager\JsonRpc\ProtocolLayer\ClientEncryption(array(
+    'key' => 'my secret pass here'
+));
+
+$client->addProtocolLayer($layer, Jdolieslager\JsonRpc\Client::LAYER_PLACEMENT_TOP);
+
+var_dump($client->sendSimpleRequest('hello', array('world')));
+```
+
+
+
+
