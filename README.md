@@ -15,7 +15,8 @@ class Test
 }
 
 $server = new Jdolieslager\JsonRpc\Server(true);
-$server->setGlobalExtension(new \Test());
+$server->registerHandler('Test');   // Second argument you can define a namespace
+                                    // Methods are than seperated with <namespace>.<orignal_method_name>
 $server->printResponseForRawRequest(file_get_contents('php://input'));
 ```
 
