@@ -16,7 +16,7 @@ class Request
     /**
      * @var NULL | string
      */
-    protected $jsonrpc;
+    protected $jsonrpc = self::VERSION_2;
 
     /**
      * @var string

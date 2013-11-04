@@ -43,11 +43,6 @@ class Server
     protected $debugMode = false;
 
     /**
-     * @var Entity\Request | NULL
-     */
-    protected $lastRequest;
-
-    /**
      * Construct the JSON RPC Server
      *
      * @param boolean $debugMode
@@ -103,14 +98,13 @@ class Server
      * Create Request object from Raw Request
      *
      * @param string $string
-     * @return Entity\Request | Entity\Response on error
+     * @return Collection\Request | Collection\Response on error
      */
     public function createRequestFromRawRequest($string)
     {
-        try {
-            // Always hace request object
-            $request = new Entity\Request();
+        $collection = new Collection\Request();
 
+        try {
             // Decode the data
             $data = @json_decode($string, true);
 
@@ -119,33 +113,52 @@ class Server
                 throw new Exception\InvalidRequest('Parse error', static::PARSE_ERROR);
             }
 
-            // Get the available arguments
-            $jsonRpc = $this->getArrayItem('jsonrpc', $data, null);
-            $method  = $this->getArrayItem('method', $data, null);
-            $params  = $this->getArrayItem('params', $data, array());
-            $id      = $this->getArrayItem('id', $data, null);
-
-            // Method should be set and params should be an array when set
-            if ($method === null || is_array($params) === false) {
-                throw new Exception\InvalidRequest('Invalid Request', static::INVALID_REQUEST);
+            // Make it a batch request
+            if (Common\ArrayUtils::isAssociative($data)) {
+                $data = array($data);
             }
 
-            // Set the values on the request object
-            $request->setJsonrpc($jsonRpc)->setId($id)->setMethod($method);
+            foreach ($data as $requestData) {
+                // Always hace request object
+                $request = new Entity\Request();
 
-            // Set all the parameters
-            foreach ($params as $offset => $value) {
-                $request->addParam($value, $offset);
+                // Append the request object
+                $collection->append($request);
+
+                // Next checks expects an array
+                if (is_array($requestData) === false) {
+                    $requestData = array();
+                }
+
+                // Get the available arguments
+                $jsonRpc = $this->getArrayItem('jsonrpc', $requestData, null);
+                $method  = $this->getArrayItem('method', $requestData, null);
+                $params  = $this->getArrayItem('params', $requestData, array());
+                $id      = $this->getArrayItem('id', $requestData, null);
+
+                // Set the values on the request object
+                $request->setJsonrpc($jsonRpc)->setId($id)->setMethod($method);
+
+                // Set all the parameters
+                foreach ($params as $offset => $value) {
+                    $request->addParam($value, $offset);
+                }
             }
-
-            // Set last request
-            $this->lastRequest = $request;
-
-            return $request;
         } catch (\Exception $e) {
             // Error occured and create
-            return $this->createResponseFromException($request, $e);
+            $response = $this->createResponseFromException(new Entity\Request(), $e);
+
+            // Create collection response object
+            $responseCollection = new Collection\Response();
+
+            // Attach the single response error (parse error);
+            $responseCollection->append($response);
+
+            // Return the response collection
+            return $responseCollection;
         }
+
+        return $collection;
     }
 
     /**
@@ -156,15 +169,15 @@ class Server
      */
     public function createResponseForRawRequest($string)
     {
-        $request = $this->createRequestFromRawRequest($string);
+        $collection = $this->createRequestFromRawRequest($string);
 
         // When we get an response object. An error has occured
-        if (($request instanceof Entity\Response)) {
-            return $request;
+        if (($collection instanceof Collection\Response)) {
+            return $collection;
         }
 
         // Perform request action
-        return $this->createResponseForRequest($request);
+        return $this->createResponseForRequest($collection);
     }
 
     /**
@@ -173,44 +186,60 @@ class Server
      * @param  Entity\Response $response
      * @return string
      */
-    public function createRawResponseFromResponse(Entity\Response $response)
+    public function createRawResponseFromResponse(Collection\Response $response)
     {
         // Get the array
-        $array = $response->getArrayCopy();
+        $collection = $response->getArrayCopy();
 
-        // JSON RPC should be set for returning
-        if ($response->getJsonrpc() === null) {
-            unset($array['jsonrpc']);
+        foreach ($collection as &$singleResponse) {
+             // JSON RPC should be set for returning
+            if ($singleResponse['jsonrpc'] === null) {
+                unset($singleResponse['jsonrpc']);
+            }
+
+            // Check if we should return result or error
+            if (empty($singleResponse['error']) === false) {
+                unset($singleResponse['result']);
+                if (empty($singleResponse['error']['data'])) {
+                    unset($singleResponse['error']['data']);
+                }
+            } else {
+                unset($singleResponse['error']);
+            }
         }
 
-        // Check if we should return result or error
-        if ($response->getError() instanceof Entity\Error) {
-            unset($array['result']);
-        } else {
-            unset($array['error']);
+        // Make it single on a non batch request
+        if ($response->isBatch() === false) {
+            $collection = array_shift($collection);
         }
 
         // Encode the remaining array
-        return json_encode($array, JSON_PRETTY_PRINT);
+        return json_encode($collection);
     }
 
     /**
      * Handle the incoming request
      *
-     * @param Entity\Request $request
+     * @param  Entity\Request $request
+     * @return Collection\Response
      */
-    public function createResponseForRequest(Entity\Request $request)
+    public function createResponseForRequest(Collection\Request $requests)
     {
-        // Set the last request object
-        $this->lastRequest = $request;
+        $collection = new Collection\Response();
 
-        try {
-            $response = $this->parseRequest($request);
-        } catch (\Exception $e) {
-            $response = $this->createResponseFromException($request, $e);
+        foreach ($requests as $request) {
+            try {
+                $response = $this->parseRequest($request);
+            } catch (\Exception $e) {
+                $response = $this->createResponseFromException($request, $e);
+            }
+
+            if ($response instanceof Entity\Response) {
+                $collection->append($response);
+            }
         }
 
-        return $response;
+        return $collection;
     }
 
     /**
@@ -221,6 +250,11 @@ class Server
      */
     protected function parseRequest(Entity\Request $request)
     {
+        // Check if the method has been set
+        if ($request->getMethod() === null) {
+            throw new Exception\InvalidRequest('Invalid request', static::INVALID_REQUEST);
+        }
+
         // normalize the name
         $methodName = strtolower($request->getMethod());
 
@@ -393,10 +427,10 @@ class Server
      * @param Entity\Response | NULL $response  On NULL print No Content
      * @return void
      */
-    public function printResponse(Entity\Response $response = null)
+    public function printResponse(Collection\Response $response = null)
     {
         // Response NULL means no content
-        if ($response === null) {
+        if ($response->count() === 0) {
             if (!headers_sent()) {
                 header('No Content', null, 204);
             }
@@ -467,23 +501,20 @@ class Server
      */
     public function handlePhpError($code, $message, $file = null, $line = null, $context= null)
     {
-        // Retrieve the request object
-        $request = $this->lastRequest;
-        if (($request instanceof Entity\Request) === false) {
-            $request = new Entity\Request();
-        }
-
         // Create response object
         $response = $this->createResponseFromException(
-            $request,
+            new Entity\Request(),
             new \Exception(
                 $message,
                 $code
             )
         );
 
+        $collection = new Collection\Response();
+        $collection->append($response);
+
         // Set response
-        $this->printResponse($response);
+        $this->printResponse($collection);
 
         // No use to go further stop the execution
         exit;

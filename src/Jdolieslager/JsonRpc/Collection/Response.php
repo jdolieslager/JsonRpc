@@ -20,4 +20,17 @@ class Response extends \ArrayIterator
     {
         return (bool) ($this->count() > 1);
     }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getArrayCopy()
+    {
+        $data = parent::getArrayCopy();
+        foreach ($data as $index => $value) {
+            $data[$index] = $value->getArrayCopy();
+        }
+
+        return $data;
+    }
 }
