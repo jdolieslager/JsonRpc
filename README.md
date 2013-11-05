@@ -1,7 +1,9 @@
 JsonRpc
 =======
-
 JSON RPC Server / Client library
+
+[![Build Status](https://travis-ci.org/jdolieslager/JsonRpc.png?branch=master)](https://travis-ci.org/jdolieslager/JsonRpc)
+
 
 Example Usage (Server url: http://josnrpc.mine)
 =============
