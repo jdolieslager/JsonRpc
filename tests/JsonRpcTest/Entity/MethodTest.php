@@ -3,6 +3,7 @@ namespace JsonRpcTest\Entity;
 
 use Jdolieslager\JsonRpc\Entity\Method;
 use Jdolieslager\JsonRpc\Entity\Parameter;
+
 class MethodTest extends \PHPUnit_Framework_TestCase
 {
 	public function testGettersAndSetters()

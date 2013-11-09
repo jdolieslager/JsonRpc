@@ -451,7 +451,7 @@ class Server
             $data['exceptions'] = array();
             $data['backtrace']  = $e->getTrace();
 
-            while (($e = $e->getPrevious())) {
+            while (null !== ($e = $e->getPrevious())) {
                 $data['exceptions'][] = array($e->getCode() => $e->getMessage());
             }
         }
