@@ -222,13 +222,8 @@ class Client
             );
         }
 
-        var_dump($result);
-
         // First go through the layer stack
         $result = $this->protocolLayerStack->handleResponse($result);
-
-        var_dump($result);
-        exit;
 
         $json = json_decode($result, true);
         if (is_array($json) === false) {
