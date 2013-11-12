@@ -92,12 +92,54 @@ class HandlerReflectionMakerTest extends\ PHPUnit_Framework_TestCase
 					break;
 				case 'twoArgument':
 					$this->assertEquals(2, $parameters->count());
+					// Argument 1
+					$this->assertEquals(true, $parameters->offsetExists(0));
+					$this->assertInstanceOf($this->parameterEntity, $parameters->offsetGet(0));
+					$this->assertEquals(0, $parameters->offsetGet(0)->getIndex());
+					$this->assertEquals('argument1', $parameters->offsetGet(0)->getName());
+					$this->assertEquals(true, $parameters->offsetGet(0)->getRequired());
+					
+					// Argument 2
+					$this->assertEquals(true, $parameters->offsetExists(1));
+					$this->assertInstanceOf($this->parameterEntity, $parameters->offsetGet(1));
+					$this->assertEquals(1, $parameters->offsetGet(1)->getIndex());
+					$this->assertEquals('argument2', $parameters->offsetGet(1)->getName());
+					$this->assertEquals(true, $parameters->offsetGet(1)->getRequired());
 					break;
 				case 'twoArgumentOneOptional':
 					$this->assertEquals(2, $parameters->count());
+					// Argument 1
+					$this->assertEquals(true, $parameters->offsetExists(0));
+					$this->assertInstanceOf($this->parameterEntity, $parameters->offsetGet(0));
+					$this->assertEquals(0, $parameters->offsetGet(0)->getIndex());
+					$this->assertEquals('argument1', $parameters->offsetGet(0)->getName());
+					$this->assertEquals(true, $parameters->offsetGet(0)->getRequired());
+						
+					// Argument 2
+					$this->assertEquals(true, $parameters->offsetExists(1));
+					$this->assertInstanceOf($this->parameterEntity, $parameters->offsetGet(1));
+					$this->assertEquals(1, $parameters->offsetGet(1)->getIndex());
+					$this->assertEquals('argument2', $parameters->offsetGet(1)->getName());
+					$this->assertEquals(false, $parameters->offsetGet(1)->getRequired());
+					$this->assertEquals('optional', $parameters->offsetGet(1)->getDefault());
 					break;
 				case 'twoArgumentTwoOptional':
 					$this->assertEquals(2, $parameters->count());
+					// Argument 1
+					$this->assertEquals(true, $parameters->offsetExists(0));
+					$this->assertInstanceOf($this->parameterEntity, $parameters->offsetGet(0));
+					$this->assertEquals(0, $parameters->offsetGet(0)->getIndex());
+					$this->assertEquals('argument1', $parameters->offsetGet(0)->getName());
+					$this->assertEquals(false, $parameters->offsetGet(0)->getRequired());
+					$this->assertEquals('optional', $parameters->offsetGet(0)->getDefault());
+					
+					// Argument 2
+					$this->assertEquals(true, $parameters->offsetExists(1));
+					$this->assertInstanceOf($this->parameterEntity, $parameters->offsetGet(1));
+					$this->assertEquals(1, $parameters->offsetGet(1)->getIndex());
+					$this->assertEquals('argument2', $parameters->offsetGet(1)->getName());
+					$this->assertEquals(false, $parameters->offsetGet(1)->getRequired());
+					$this->assertEquals('optional', $parameters->offsetGet(1)->getDefault());
 					break;
 				default:
 					$this->throwException(new \Exception('Method ' . $result->getName() . ' is not tested!'));

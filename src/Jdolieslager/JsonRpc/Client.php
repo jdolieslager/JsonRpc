@@ -2,6 +2,7 @@
 namespace Jdolieslager\JsonRpc;
 
 use Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerStack;
+use Jdolieslager\JsonRpc\Request\Curl;
 
 /**
  * @category    Jdolieslager
@@ -139,7 +140,7 @@ class Client
         foreach ($params as $index => $value) {
             $request->addParam($value, $index);
         }
-
+        
         return $this->sendSingleRequest($request);
     }
 
@@ -177,20 +178,18 @@ class Client
         // First go through the layer stack
         $rawPost = $this->protocolLayerStack->handleRequest($rawPost);
 
-        $ch = curl_init($this->getUrl());
-        curl_setopt_array($ch, array(
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $rawPost,
-            CURLOPT_USERAGENT      => 'Jdolieslager JsonRpc Client',
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_RETURNTRANSFER => true
-        ));
+        $httpRequest = $this->getHttpRequest($rawPost);
+        
+        // Perform request
+        $result = $httpRequest->execute();
+        
+        // Retrieve request information
+        $info   = $httpRequest->getInfo();
 
-        $result = curl_exec($ch);
-        $info   = curl_getinfo($ch);
+        // Close the connection
+        $httpRequest->close();
 
-        curl_close($ch);
-
+        // 404 is not good
         if ($info['http_code'] === 404) {
             throw new Exception\InvalidRequest(
                 'Host ' . $this->getUrl() . ' not found',
@@ -198,9 +197,28 @@ class Client
             );
         }
 
+        // parse raw response and return response collection
         return $this->parseResponse($request, $result, $info);
     }
-
+    
+    /**
+     * Get the Http Request object
+     * 
+     * @param string $rawPost
+     * @return \Jdolieslager\JsonRpc\Request\Curl
+     */
+    protected function getHttpRequest($rawPost)
+    {
+    	$request = new Curl($this->getUrl());
+    	$request->setOption(CURLOPT_POST, true);
+    	$request->setOption(CURLOPT_POSTFIELDS, $rawPost);
+    	$request->setOption(CURLOPT_USERAGENT, 'Jdolieslager JsonRpc Client');
+    	$request->setOption(CURLOPT_FOLLOWLOCATION, true);
+    	$request->setOption(CURLOPT_RETURNTRANSFER, true);
+    	
+    	return $request;
+    }
+    
     /**
      * Parse the result given by the JSON RPC Server
      *
@@ -211,6 +229,9 @@ class Client
      */
     protected function parseResponse(Collection\Request $request, $result, $info)
     {
+    	// Rewind to collection to start from the beginning
+    	$request->rewind();
+    	
         if (
             empty($result) &&
             $request->isBatch() === false &&
