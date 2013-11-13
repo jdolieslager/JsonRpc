@@ -1,261 +1,275 @@
 <?php
 namespace JsonRpcTest;
 
-use Jdolieslager\JsonRpc\Client;
-use ClientProtocolLayer;
-use Jdolieslager\JsonRpc\Collection\Response;
 use Jdolieslager\JsonRpc\Entity\Request;
+use Jdolieslager\JsonRpc\Client;
 
-require_once __DIR__ . '/../data/ClientProtocolLayer.php';
+require_once DATA_ROOT . 'ClientProtocolLayer.php';
+require_once DATA_ROOT . 'RequestFailure.php';
 
 /**
  * Client test case.
  */
 class ClientTest extends \PHPUnit_Framework_TestCase
 {
-	/**
-	 * @var Client
-	 */
-	private $client;
+	protected $clientClass      	   = 'Jdolieslager\\JsonRpc\\Client';
+	protected $responseClass    	   = 'Jdolieslager\\JsonRpc\\Entity\\Response';
+	protected $responseCollectionClass = 'Jdolieslager\\JsonRpc\\Collection\\Response';
+	protected $errorClass       	   = 'Jdolieslager\\JsonRpc\\Entity\\Error';
+	protected $httpRequestClass 	   = 'Jdolieslager\\JsonRpc\\Request\\RequestInterface';
+	protected $curlClass			   = 'Jdolieslager\\JsonRpc\\Request\\Curl';
 	
-	private $fullClass = 'Jdolieslager\\JsonRpc\\Client';
-	
-	/**
-	 * Prepares the environment before running a test.
-	 */
-	protected function setUp() 
+	public function testSinglePositionalRequest()
 	{
-		parent::setUp ();
-		$this->client = new Client('dummy_url');
+		$rawResponse = file_get_contents(DATA_ROOT . 'json/single_positional_response.json');
+		$client 	 = $this->mockClient($rawResponse);
+		$result 	 = $client->sendSingleRequest($this->dummyRequest());
+		
+		$this->assertInstanceOf($this->responseClass, $result);
+		$this->assertEquals('2.0', $result->getJsonrpc());
+		$this->assertEquals(19, $result->getResult());
+		$this->assertEquals(1, $result->getId());
 	}
 	
-	/**
-	 * Cleans up the environment after running a test.
-	 */
-	protected function tearDown() 
+	public function testSingleSimpleRequest()
 	{
-		$this->client = null;
-		parent::tearDown ();
+		$rawResponse = file_get_contents(DATA_ROOT . 'json/single_positional_response.json');
+		$client 	 = $this->mockClient($rawResponse);
+		$result 	 = $client->sendSimpleRequest('simple', array('hello'));
+		
+		$this->assertInstanceOf($this->responseClass, $result);
+		$this->assertEquals('2.0', $result->getJsonrpc());
+		$this->assertEquals(19, $result->getResult());
+		$this->assertEquals(1, $result->getId());
 	}
 	
-	/**
-	 * Tests Client->addProtocolLayer()
-	 */
-	public function testAddProtocolLayer() 
+	public function testSingleNotificationRequest()
 	{
-		$result = $this->client->addProtocolLayer(
-			new ClientProtocolLayer(),
-			Client::LAYER_PLACEMENT_TOP 
+		$client = $this->mockClient('', 204);
+		$result = $client->sendNotification('notify', array('world'));
+		
+		$this->assertEquals(null, $result);
+	}
+	
+	public function testSingleNoMethodRequest()
+	{
+		$rawResponse = file_get_contents(DATA_ROOT . 'json/single_no_method.json');
+		$client 	 = $this->mockClient($rawResponse);
+		$result 	 = $client->sendSingleRequest($this->dummyRequest());
+		
+		$this->assertInstanceOf($this->responseClass, $result);
+		$this->assertEquals('2.0', $result->getJsonrpc());
+		$this->assertEquals(1, $result->getId());
+		
+		// Validate the error
+		$this->assertInstanceOf($this->errorClass, $result->getError());	
+		$this->assertEquals(Client::METHOD_NOT_FOUND, $result->getError()->getCode());
+		$this->assertEquals('Method not found', $result->getError()->getMessage());
+	}
+	
+	public function testCallbackRequest()
+	{
+		$triggered = false;
+		$callback  = function($response) use ($triggered) {
+			$triggered = true;
+		};
+		
+		// Initialize vars
+		$rawResponse = file_get_contents(DATA_ROOT . 'json/single_positional_response.json');
+		$collection  = $this->dummyCollectionRequest(0);
+		$request 	 = $this->dummyRequest();
+		$client 	 = $this->mockClient($rawResponse);
+		 
+		// Link request to collection
+		$collection->addRequest($request, $callback);
+		
+		// Execute command
+		$result = $client->sendRequest($collection);
+		
+		$this->assertInstanceOf($this->responseCollectionClass, $result);
+	}
+	
+	public function testSendV1Request()
+	{
+		$rawResponse = file_get_contents(DATA_ROOT . 'json/single_positional_response.json');
+		$request 	 = $this->dummyRequest();
+		$client 	 = $this->mockClient($rawResponse);
+	
+		// set V1 flag
+		$request->setJsonrpc(Request::VERSION_1);
+		
+		$result = $client->sendSingleRequest($request);
+		
+		$this->assertInstanceOf($this->responseClass, $result);
+		$this->assertEquals(19, $result->getResult());
+		$this->assertEquals(1, $result->getId());
+	}
+	
+	public function testRequestEncodeFailure()
+	{
+		$this->setExpectedException('Jdolieslager\\JsonRpc\\Exception\\RuntimeException', 'Could not encode request data', 1);
+		
+		$request = new \RequestFailure();
+		$request->setId(1);
+		$request->setMethod('hello');
+		
+		$client = new Client('asdf');
+		$client->sendSingleRequest($request);
+	}
+	
+	public function testGetHttpRequestObject()
+	{
+		$client     = new Client('http://localhost');
+		$reflection = new \ReflectionClass($client);
+		$method     = $reflection->getMethod('getHttpRequest');
+		$method->setAccessible(true);
+		
+		$request = $method->invoke($client, 'rawPost');
+		$this->assertInstanceOf($this->curlClass, $request);
+	}
+	
+	public function testNotFoundRequest()
+	{
+		$this->setExpectedException('Jdolieslager\\JsonRpc\\Exception\\InvalidRequest', 'Host http://localhost not found', 2);
+		
+		$client = $this->mockClient('', 404);
+		$result = $client->sendSimpleRequest('hello', array('world'));
+	}
+	
+	public function testGetUrl()
+	{
+		$client = new Client('http://localhost');
+		$this->assertEquals('http://localhost', $client->getUrl());
+	}
+	
+	public function testSetUrl()
+	{
+		$client = new Client('http://localhost');
+		$this->assertInstanceOf($this->clientClass, $client->setUrl('something.nl'));
+	}
+	
+	public function testAddLayer()
+	{
+		$client = new Client('http://localhost');
+		$client->addProtocolLayer(new \ClientProtocolLayer(), Client::LAYER_PLACEMENT_TOP);
+	}
+	
+	public function testClientDecodeError()
+	{
+		$this->setExpectedException(
+			'Jdolieslager\\JsonRpc\\Exception\\InvalidResponse', 
+			'Client parse error', 
+			Client::CLIENT_PARSE_ERROR
 		);
 		
-		$this->assertInstanceOf($this->fullClass, $result);
+		$client = $this->mockClient('unparseable');
+		$result = $client->sendSimpleRequest('hello', array('world'));
 	}
 	
-	/**
-	 * Tests Client->setUrl()
-	 */
-	public function testSetUrl() 
+	public function testClientEmptyError()
 	{
-		$result = $this->client->setUrl('dummy');
-		$this->assertInstanceOf($this->fullClass, $result);
-	}
-	
-	/**
-	 * Tests Client->getUrl()
-	 */
-	public function testGetUrl() 
-	{
-		$this->client->setUrl('dummy');
-		$this->assertEquals('dummy', $this->client->getUrl());
-	}
-	
-	/**
-	 * Tests Client->sendSingleRequest()
-	 */
-	public function testSendSingleRequest() 
-	{
-		// Create dummy response
-		$response 	  = new Response();
-		$singResponse = new \Jdolieslager\JsonRpc\Entity\Response();
-		$singResponse->setId(1)->setResult('world');
-		$response->append($singResponse);
+		$this->setExpectedException(
+			'Jdolieslager\\JsonRpc\\Exception\\InvalidResponse',
+			'Client parse error',
+			Client::CLIENT_PARSE_ERROR
+		);
 		
-		// Create request object
+		$client = $this->mockClient('');
+		$result = $client->sendSimpleRequest('hello', array('world'));
+	}
+	
+	public function testExpectedBatchResponse()
+	{
+		$this->setExpectedException(
+			'Jdolieslager\\JsonRpc\\Exception\\InvalidResponse',
+			'Client expected batch result',
+			Client::CLIENT_EXPECTED_BATCH
+		);
+		
+		$rawResponse = file_get_contents(DATA_ROOT . 'json/single_named_response.json');
+		$client      = $this->mockClient($rawResponse);
+		$result      = $client->sendRequest($this->dummyCollectionRequest(3));
+	}
+	
+	public function testExpectedSingleResponse()
+	{
+		$this->setExpectedException(
+			'Jdolieslager\\JsonRpc\\Exception\\InvalidResponse',
+			'Client expected single result',
+			Client::CLIENT_EXPECTED_SINGLE
+		);
+		
+		$rawResponse = file_get_contents(DATA_ROOT . 'json/batch_request_response.json');
+		$client      = $this->mockClient($rawResponse);
+		$result      = $client->sendSingleRequest($this->dummyRequest());
+	}
+	
+	
+	/**
+	 * Get single request
+	 * 
+	 * @return \Jdolieslager\JsonRpc\Entity\Request
+	 */
+	protected function dummyRequest($id = 1)
+	{
 		$request = new Request();
-		$request->setId(1);
-		$request->setMethod('hello');
-		$request->setJsonrpc($request::VERSION_2);
+		$request->setJsonrpc(Request::VERSION_2);
+		$request->setMethod('dummy');
+		$request->setId($id);
 		
-		// Create stub class for faking send request call
-		$stub = $this->getMock($this->fullClass, array('sendRequest'), array('dummy'));
-		$stub->expects($this->any())
-			->method('sendRequest')
-			->will($this->returnValue($response));
-		
-		// Simulate request
-		$result = $stub->sendSingleRequest($request);
-		$this->assertInstanceOf('Jdolieslager\\JsonRpc\\Entity\\Response', $result);
-		$this->assertEquals('world', $result->getResult());
-		$this->assertEquals(1, $result->getId());
+		return $request;
 	}
 	
 	/**
-	 * Tests Client->sendSimpleRequest()
+	 * Get collection of dummy requests
+	 * 
+	 * @param number $amount
+	 * @return \Jdolieslager\JsonRpc\Collection\Request
 	 */
-	public function testSendSimpleRequest() 
+	protected function dummyCollectionRequest($amount = 1)
 	{
-		// Create dummy response
-		$response 	  = new Response();
-		$singResponse = new \Jdolieslager\JsonRpc\Entity\Response();
-		$singResponse->setId(1)->setResult('Hello World!');
-		$response->append($singResponse);
+		$collection = new \Jdolieslager\JsonRpc\Collection\Request();
 		
-		// Create stub class for faking send request call
-		$stub = $this->getMock($this->fullClass, array('sendRequest'), array('dummy'));
-		$stub->expects($this->any())
-			->method('sendRequest')
-			->will($this->returnValue($response));
+		for ($i = 1; $i <= $amount; ++$i) {
+			$collection->append($this->dummyRequest($i));
+		}
 		
-		$result = $stub->sendSimpleRequest('hello', array('world'));
-		
-		$this->assertInstanceOf('Jdolieslager\\JsonRpc\\Entity\\Response', $result);
-		$this->assertEquals('Hello World!', $result->getResult());
-		$this->assertEquals(1, $result->getId());
+		return $collection;
 	}
 	
+
 	/**
-	 * Tests Client->sendNotification()
+	 * Mock the Http Request
+	 * 
+	 * @param  string  $rawResponse
+	 * @param  integer $httpCode
+	 * @return \Jdolieslager\JsonRpc\Client
 	 */
-	public function testSendNotification() 
+	protected function mockClient($rawResponse, $httpCode = 200)
 	{
-		// Create dummy response
-		$response 	  = new Response();
-		$singResponse = new \Jdolieslager\JsonRpc\Entity\Response();
-		$singResponse->setId(1)->setResult('Hello World!');
-		$response->append($singResponse);
+		// Mock objects
+		$client = $this->getMock($this->clientClass, array('getHttpRequest'), array('http://localhost'));
+		$http   = $this->getMock($this->httpRequestClass);
 		
-		// Create stub class for faking send request call
-		$stub = $this->getMock($this->fullClass, array('sendRequest'), array('dummy'));
-		$stub->expects($this->any())
-			->method('sendRequest')
-			->will($this->returnValue($response));
-		
-		$this->assertEquals(null, $stub->sendNotification('hello', array('world')));
-	}
-	
-	/**
-	 * Tests Client->sendRequest()
-	 */
-	public function testSendRequestNotFound() 
-	{
-		$http = $this->getMock('Jdolieslager\\JsonRpc\\RequestInterface', array('getInfo', 'execute', 'close'));
+		// Mock getInfo
 		$http->expects($this->once())
 			->method('getInfo')
-			->will($this->returnValue(array('http_code' => 404)));
+			->will($this->returnValue(array('http_code' => $httpCode)));
 		
+		// Mock execute
 		$http->expects($this->once())
 			->method('execute')
+			->will($this->returnValue($rawResponse));
+		
+		// Mock close
+		$http->expects($this->once())
+			->method('close')
 			->will($this->returnValue(null));
 		
-		// Mock the request adapter
-		$client = $this->getMock($this->fullClass, array('getHttpRequest'), array('dummy'));
-		$client->expects($this->any())
+		$client->expects($this->once())
 			->method('getHttpRequest')
 			->will($this->returnValue($http));
 		
-		// Create fake request
-		$request = new Request();
-		$request->setId(1);
-		$request->setMethod('failed');
-		
-		$requestCollection = new \Jdolieslager\JsonRpc\Collection\Request(array($request));
-		
-		$this->setExpectedException('Jdolieslager\JsonRpc\Exception\InvalidRequest');
-		$client->sendRequest($requestCollection);
-	}
-	
-	public function testSendRequestWithNonJsonResponse()
-	{
-		$http = $this->getMock('Jdolieslager\\JsonRpc\\RequestInterface', array('getInfo', 'execute', 'close'));
-		$http->expects($this->once())
-			->method('getInfo')
-			->will($this->returnValue(array('http_code' => 200)));
-		
-		$http->expects($this->once())
-		->method('execute')
-		->will($this->returnValue('this is no json formatted string'));
-		
-		// Mock the request adapter
-		$client = $this->getMock($this->fullClass, array('getHttpRequest'), array('dummy'));
-		$client->expects($this->any())
-			->method('getHttpRequest')
-			->will($this->returnValue($http));
-		
-		// Create fake request
-		$request = new Request();
-		$request->setId(1);
-		$request->setMethod('hello');
-		
-		$requestCollection = new \Jdolieslager\JsonRpc\Collection\Request(array($request));
-		
-		$this->setExpectedException('Jdolieslager\JsonRpc\Exception\InvalidResponse', 'Client parse error', Client::CLIENT_PARSE_ERROR);
-		$client->sendRequest($requestCollection);
-	}
-	
-	public function testSendRequestWithExpectedBatchResult()
-	{
-		$http = $this->getMock('Jdolieslager\\JsonRpc\\RequestInterface', array('getInfo', 'execute', 'close'));
-		$http->expects($this->once())
-			->method('getInfo')
-			->will($this->returnValue(array('http_code' => 200)));
-		
-		$http->expects($this->once())
-		->method('execute')
-		->will($this->returnValue('{"id":1,"result":"a"}'));
-		
-		// Mock the request adapter
-		$client = $this->getMock($this->fullClass, array('getHttpRequest'), array('dummy'));
-		$client->expects($this->any())
-			->method('getHttpRequest')
-			->will($this->returnValue($http));
-		
-		// Create fake request
-		$request = new Request();
-		$request->setId(1);
-		$request->setMethod('hello');
-		
-		$requestCollection = new \Jdolieslager\JsonRpc\Collection\Request(array($request, $request));
-		
-		$this->setExpectedException('Jdolieslager\JsonRpc\Exception\InvalidResponse', 'Client expected batch result', Client::CLIENT_EXPECTED_BATCH);
-		$client->sendRequest($requestCollection);
-	}
-	
-	public function testSendRequestWithExpectedSingleResult()
-	{
-		$http = $this->getMock('Jdolieslager\\JsonRpc\\RequestInterface', array('getInfo', 'execute', 'close'));
-		$http->expects($this->once())
-			->method('getInfo')
-			->will($this->returnValue(array('http_code' => 200)));
-		
-		$http->expects($this->once())
-		->method('execute')
-		->will($this->returnValue('[{"id":1,"result":"a"},{"id":1,"result":"a"}]'));
-		
-		// Mock the request adapter
-		$client = $this->getMock($this->fullClass, array('getHttpRequest'), array('dummy'));
-		$client->expects($this->any())
-			->method('getHttpRequest')
-			->will($this->returnValue($http));
-		
-		// Create fake request
-		$request = new Request();
-		$request->setId(1);
-		$request->setMethod('hello');
-		
-		$requestCollection = new \Jdolieslager\JsonRpc\Collection\Request(array($request));
-		
-		$this->setExpectedException('Jdolieslager\JsonRpc\Exception\InvalidResponse', 'Client expected single result', Client::CLIENT_EXPECTED_SINGLE);
-		$client->sendRequest($requestCollection);
+		return $client;
 	}
 }
-

@@ -118,6 +118,11 @@ class Client
 
         // Send the collection
         $result = $this->sendRequest($collection);
+        
+        // In case of a notification we receive NULL
+        if ($result === null) {
+        	return null;
+        }
 
         // Return the single result
         return $result->current();
@@ -162,7 +167,7 @@ class Client
             $request->addParam($index, $value);
         }
 
-        return null;
+        return $this->sendSingleRequest($request);
     }
 
     /**
@@ -188,6 +193,11 @@ class Client
 
         // Close the connection
         $httpRequest->close();
+        
+        // Notify action no content available
+        if ($info['http_code'] === 204) {
+        	return null;
+        }
 
         // 404 is not good
         if ($info['http_code'] === 404) {
@@ -347,7 +357,7 @@ class Client
             $data = array_shift($data);
         }
 
-        $json = json_encode($data);
+        $json = @json_encode($data);
         if ($json === false) {
             throw new Exception\RuntimeException(
                 'Could not encode request data',
