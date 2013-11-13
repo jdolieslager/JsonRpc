@@ -65,6 +65,9 @@ class ClientTest extends \PHPUnit_Framework_TestCase
 		$this->assertInstanceOf($this->errorClass, $result->getError());	
 		$this->assertEquals(Client::METHOD_NOT_FOUND, $result->getError()->getCode());
 		$this->assertEquals('Method not found', $result->getError()->getMessage());
+		$this->assertInternalType('array', $result->getError()->getArrayCopy());
+		$this->assertEquals(null, $result->getError()->getData());
+		$this->assertEmpty($result->getError()->getData());
 	}
 	
 	public function testCallbackRequest()
