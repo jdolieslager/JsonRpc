@@ -148,7 +148,7 @@ class Server
         try {
             // Decode the data
             $data = @json_decode($string, true);
-
+            
             // No array means decoding failed
             if (is_array($data) === false) {
                 throw new Exception\InvalidRequest('Parse error', static::PARSE_ERROR);
