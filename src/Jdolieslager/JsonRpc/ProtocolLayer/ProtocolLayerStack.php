@@ -134,7 +134,7 @@ class ProtocolLayerStack
             case self::PLACEMENT_BELOW:
                 $oldLayer = $currentLayer->getLowerLayer();
                 $layer->setUpperLayer($currentLayer);
-                $layer->setLowerLayer($oldBottomLayer);
+                $layer->setLowerLayer($oldLayer);
                 $currentLayer->setLowerLayer($layer);
 
                 if ($currentLayer === $oldBottomLayer) {

@@ -68,6 +68,7 @@ class Curl implements RequestInterface
 	{
 		if ($this->curl !== null) {
 			curl_close($this->curl);
+			$this->curl = null;
 		}		
 	}
 }

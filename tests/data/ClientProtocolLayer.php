@@ -3,22 +3,39 @@ use Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerInterface;
 
 class ClientProtocolLayer implements ProtocolLayerInterface
 {
-	/* (non-PHPdoc)
+	/**
+	 * @var ProtocolLayerInterface
+	 */
+	protected $upperLayer;
+	
+	/**
+	 * @var ProtocolLayerInterface
+	 */
+	protected $lowerpLayer;
+	
+	/**
 	 * @see \Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerInterface::handleRequest()
 	 */
 	public function handleRequest($request) 
 	{
-		// TODO Auto-generated method stub
+		if ($request === 'hello') {
+			return 'world';
+		}		
 		
+		return $request;
 	}
 
-	/* (non-PHPdoc)
+	/**
+	 * (non-PHPdoc)
 	 * @see \Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerInterface::handleResponse()
 	 */
 	public function handleResponse($response) 
 	{
-		// TODO Auto-generated method stub
+		if ($response === 'world') {
+			return 'hello';
+		}	
 		
+		return $response;
 	}
 
 	/* (non-PHPdoc)
@@ -26,8 +43,9 @@ class ClientProtocolLayer implements ProtocolLayerInterface
 	 */
 	public function setLowerLayer(\Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerInterface $layer = null) 
 	{
-		// TODO Auto-generated method stub
+		$this->lowerpLayer = $layer;
 		
+		return $this;		
 	}
 
 	/* (non-PHPdoc)
@@ -35,8 +53,7 @@ class ClientProtocolLayer implements ProtocolLayerInterface
 	 */
 	public function getLowerLayer() 
 	{
-		// TODO Auto-generated method stub
-		
+		return $this->lowerpLayer;		
 	}
 
 	/* (non-PHPdoc)
@@ -44,8 +61,9 @@ class ClientProtocolLayer implements ProtocolLayerInterface
 	 */
 	public function setUpperLayer(\Jdolieslager\JsonRpc\ProtocolLayer\ProtocolLayerInterface $layer = null) 
 	{
-		// TODO Auto-generated method stub
-		
+		$this->upperLayer = $layer;
+
+		return $this;
 	}
 
 	/* (non-PHPdoc)
@@ -53,7 +71,6 @@ class ClientProtocolLayer implements ProtocolLayerInterface
 	 */
 	public function getUpperLayer() 
 	{
-		// TODO Auto-generated method stub
-		
+		return $this->upperLayer;	
 	}
 }

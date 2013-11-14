@@ -68,6 +68,9 @@ class HandlerReflectionMakerTest extends\ PHPUnit_Framework_TestCase
 			$this->assertInstanceOf($this->parameterCollection, $result->getParameters());
 			
 			$parameters = $result->getParameters();
+			$copy       = $parameters->getArrayCopy();
+			
+			$this->assertInternalType('array', $copy);
 			
 			switch ($result->getName()) {
 				case 'noArgument':
