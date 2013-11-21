@@ -46,7 +46,7 @@ class HandlerReflectionMaker
     {
         if (class_exists($class) === false) {
             throw new Exception\InvalidArgument(
-                sprintf($this->excepetions[1], $class),
+                sprintf($this->exceptions[1], $class),
                 1
             );
         }

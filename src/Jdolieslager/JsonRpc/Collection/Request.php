@@ -12,7 +12,6 @@ use Jdolieslager\JsonRpc\Entity\Response as EntityResponse;
  *
  * @method EntityRequest current
  * @method EntityRequest offsetGet
- * @method void offsetSet($index, EntityRequest $newval)
  */
 class Request extends \ArrayIterator
 {
