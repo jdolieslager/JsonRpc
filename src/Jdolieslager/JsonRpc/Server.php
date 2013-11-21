@@ -577,6 +577,11 @@ class Server
         }
 
         $code = $this->getArrayItem('type', $last, 1);
+
+        if ($code !== E_PARSE && $code !== E_ERROR && $code !== E_RECOVERABLE_ERROR) {
+            return;
+        }
+
         $message = $this->getArrayItem('message', $last, '');
         $line = $this->getArrayItem('line', $last, null);
         $file = $this->getArrayItem('file', $last, null);
